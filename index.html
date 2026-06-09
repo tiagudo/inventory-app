@@ -174,8 +174,8 @@
 
 <div class="stats">
   <div class="stat"><div class="lbl">Items</div><div class="val" id="s-total">0</div></div>
-  <div class="stat"><div class="lbl">In stock</div><div class="val green" id="s-in">0</div></div>
-  <div class="stat"><div class="lbl">Out</div><div class="val red" id="s-out">0</div></div>
+  <div class="stat"><div class="lbl">Checked in</div><div class="val green" id="s-in">0</div></div>
+  <div class="stat"><div class="lbl">Checked out</div><div class="val red" id="s-out">0</div></div>
   <div class="stat"><div class="lbl">Scans</div><div class="val" id="s-tx">0</div></div>
 </div>
 
@@ -328,19 +328,37 @@ function scanLoop() {
   rafId = requestAnimationFrame(scanLoop);
 }
 
+// --- Parse pipe-delimited QR: "Item Name | CODE | Notes"
+function parseQR(raw) {
+  const parts = raw.split('|').map(s => s.trim());
+  const name  = parts[0] || raw.trim();
+  const code  = (parts[1] || name).toUpperCase().replace(/\s+/g, '-');
+  const notes = parts[2] || '';
+  return { name, code, notes };
+}
+
 // --- Logic ---
 function processCode(raw) {
-  const code = raw.toUpperCase().replace(/\s+/g,'-');
-  if (!inventory[code]) inventory[code] = { name: code, qty: 0, total: 0, category: '', notes: '' };
+  const { name, code, notes } = parseQR(raw);
+
+  const isNew = !inventory[code];
+  if (isNew) {
+    inventory[code] = { name, notes, status: 'in', total: 0 };
+  }
   const item = inventory[code];
 
+  // Update name/notes if QR carries richer data than stored
+  if (!isNew && name !== code) item.name = name;
+  if (!isNew && notes) item.notes = notes;
+
   if (mode === 'in') {
-    item.qty++; item.total++;
-    showFeedback('in', `Checked in: ${item.name}`);
+    if (item.status === 'in') { showFeedback('err', `Already checked in: ${item.name}`); return; }
+    item.status = 'in'; item.total++;
+    showFeedback('in', `${isNew ? 'Added & checked in' : 'Checked in'}: ${item.name}`);
     log.unshift({ code, name: item.name, action: 'in', time: new Date() });
   } else {
-    if (item.qty <= 0) { showFeedback('err', `None in stock: ${item.name}`); return; }
-    item.qty--;
+    if (item.status === 'out') { showFeedback('err', `Already checked out: ${item.name}`); return; }
+    item.status = 'out';
     showFeedback('out', `Checked out: ${item.name}`);
     log.unshift({ code, name: item.name, action: 'out', time: new Date() });
   }
@@ -349,18 +367,18 @@ function processCode(raw) {
   if (currentTab === 'log') renderTab('log');
 }
 
+
 function addItem() {
   const name = document.getElementById('add-name').value.trim();
   if (!name) { showFeedback('err', 'Item name is required.'); return; }
-  let code = (document.getElementById('add-code').value.trim() || '').toUpperCase().replace(/\s+/g,'-');
+  let code = (document.getElementById('add-code').value.trim() || '').toUpperCase().replace(/\s+/g, '-');
   if (!code) code = 'ITEM-' + Date.now().toString(36).toUpperCase();
   if (inventory[code]) { showFeedback('err', `Code "${code}" already exists.`); return; }
-  const qty = Math.max(0, parseInt(document.getElementById('add-qty').value) || 0);
-  inventory[code] = { name, qty, total: qty, category: document.getElementById('add-cat').value.trim(), notes: document.getElementById('add-notes').value.trim() };
+  const notes = document.getElementById('add-notes').value.trim();
+  inventory[code] = { name, notes, status: 'in', total: 0 };
   log.unshift({ code, name, action: 'added', time: new Date() });
   showFeedback('added', `Added: ${name} (${code})`);
-  ['add-name','add-code','add-cat','add-notes'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('add-qty').value = '1';
+  ['add-name', 'add-code', 'add-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('add-name').focus();
   saveData(); renderStats();
 }
@@ -462,13 +480,14 @@ function addHTML() {
   return `
     <div class="card">
       <div class="card-title" style="padding-bottom:10px">New item</div>
+      <div style="padding: 0 14px 12px; font-size: 12px; color: var(--text3); line-height: 1.6;">
+        Or encode a QR with:<br>
+        <code style="font-size:12px; background:var(--bg2); padding:2px 6px; border-radius:4px;">Item Name | CODE | Notes</code>
+        and scanning will auto-add it.
+      </div>
       <div class="field"><label>Item name *</label><input type="text" id="add-name" placeholder='e.g. Dell Laptop 15"' /></div>
       <div class="field"><label>Code / SKU (auto if blank)</label><input type="text" id="add-code" placeholder="e.g. LAPTOP-001" /></div>
-      <div class="field-row2">
-        <div class="field"><label>Initial qty</label><input type="number" id="add-qty" value="1" min="0" /></div>
-        <div class="field"><label>Category</label><input type="text" id="add-cat" placeholder="e.g. Electronics" /></div>
-      </div>
-      <div class="field"><label>Notes</label><input type="text" id="add-notes" placeholder="Serial #, location…" /></div>
+      <div class="field"><label>Notes (optional)</label><input type="text" id="add-notes" placeholder="Serial #, location…" /></div>
       <div class="btn-row"><button class="btn btn-primary" onclick="addItem()">＋ Add to inventory</button></div>
       <div class="feedback" id="feedback-strip" style="display:none"></div>
     </div>
@@ -477,23 +496,18 @@ function addHTML() {
 
 function invHTML() {
   const entries = Object.entries(inventory);
-  const alertBanner = alertHTML();
-  if (!entries.length) return alertBanner + `<div class="card"><div class="empty">No items yet.<br>Add one or scan a QR code.</div></div>`;
-  return alertBanner + `<div class="card">` + entries.map(([code, item]) => {
-    const lastLog = log.find(l => l.code === code && l.action !== 'added');
-    const badge = lastLog ? `<span class="pill ${lastLog.action==='in'?'pill-in':'pill-out'}">${lastLog.action}</span>` : '';
-    const isLow = item.qty > 0 && item.qty <= lowThresh;
-    const lowPill = isLow ? `<span class="pill pill-low">low</span>` : '';
-    const qc = item.qty === 0 ? 'zero' : isLow ? 'low' : '';
-    const sub = [item.category, item.notes, item.name !== code ? code : ''].filter(Boolean).join(' · ');
+  if (!entries.length) return `<div class="card"><div class="empty">No items yet.<br>Add one or scan a QR code.</div></div>`;
+  return `<div class="card">` + entries.map(([code, item]) => {
+    const isOut = item.status === 'out';
+    const statusPill = `<span class="pill ${isOut ? 'pill-out' : 'pill-in'}">${isOut ? 'out' : 'in'}</span>`;
+    const sub = [item.notes, item.name !== code ? code : ''].filter(Boolean).join(' · ');
     return `<div class="inv-item">
       <div class="inv-info">
         <div class="inv-name" id="inv-name-${code}">${esc(item.name)}</div>
         ${sub ? `<div class="inv-sub">${esc(sub)}</div>` : ''}
       </div>
       <div class="inv-right">
-        ${lowPill}${badge}
-        <span class="qty-badge ${qc}">${item.qty}</span>
+        ${statusPill}
         <button class="edit-btn" onclick="startRename('${code}')">✎</button>
       </div>
     </div>`;
@@ -526,13 +540,6 @@ function logHTML() {
 function settingsHTML() {
   return `
     <div class="card">
-      <div class="card-title" style="padding-bottom:6px">Low stock alert</div>
-      <div class="thresh-row">
-        <label>Alert when quantity at or below</label>
-        <input type="number" id="thresh-inp" value="${lowThresh}" min="0" max="99" onchange="setThresh(this.value)" />
-      </div>
-    </div>
-    <div class="card" style="margin-top:0">
       <div class="card-title" style="padding-bottom:10px">Data</div>
       <div class="btn-row"><button class="btn btn-neutral" onclick="exportCSV()">⬇ Export CSV</button></div>
       <div class="btn-row"><button class="btn" style="background:var(--err-light);color:var(--err-dark);border:0.5px solid var(--err-border)" onclick="clearAll()">🗑 Clear all data</button></div>
@@ -549,17 +556,15 @@ function settingsHTML() {
 }
 
 function alertHTML() {
-  if (lowThresh === 0) return '';
-  const low = Object.values(inventory).filter(i => i.qty > 0 && i.qty <= lowThresh);
-  if (!low.length) return '';
-  return `<div class="alert">⚠ Low stock: ${low.map(i=>`<strong>${esc(i.name)}</strong> (${i.qty})`).join(', ')}</div>`;
+  // No qty-based alerts in single-piece mode; kept for future use
+  return '';
 }
 
 function renderStats() {
   const items = Object.values(inventory);
   document.getElementById('s-total').textContent = items.length;
-  document.getElementById('s-in').textContent = items.filter(i=>i.qty>0).length;
-  document.getElementById('s-out').textContent = items.filter(i=>i.qty===0&&i.total>0).length;
+  document.getElementById('s-in').textContent = items.filter(i => i.status === 'in').length;
+  document.getElementById('s-out').textContent = items.filter(i => i.status === 'out').length;
   document.getElementById('s-tx').textContent = log.length;
 }
 
@@ -581,10 +586,9 @@ function manualGo() {
 }
 
 function exportCSV() {
-  const rows = [['Code','Name','Category','Notes','Quantity','Status','Total In','Low Stock']];
+  const rows = [['Code','Name','Notes','Status','Total Check-ins']];
   Object.entries(inventory).forEach(([code,item]) => {
-    const status = item.qty===0?'out of stock':item.qty<=lowThresh?'low':'in stock';
-    rows.push([code,item.name,item.category||'',item.notes||'',item.qty,status,item.total,item.qty<=lowThresh&&item.qty>0?'yes':'no']);
+    rows.push([code, item.name, item.notes||'', item.status, item.total]);
   });
   rows.push([]); rows.push(['--- Activity Log ---']); rows.push(['Code','Name','Action','Date','Time']);
   log.forEach(l=>rows.push([l.code,l.name,l.action,l.time.toLocaleDateString(),l.time.toLocaleTimeString()]));
