@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Inventory" />
+<meta name="theme-color" content="#1D9E75" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<title>Inventory Control</title>
+<style>
+  :root {
+    --green:#1D9E75; --green-light:#E1F5EE; --green-border:#5DCAA5; --green-dark:#0F6E56;
+    --red:#D85A30; --red-light:#FAECE7; --red-border:#F0997B; --red-dark:#993C1D;
+    --blue-light:#E6F1FB; --blue-border:#85B7EB; --blue-dark:#0C447C;
+    --amber-light:#FAEEDA; --amber-border:#EF9F27; --amber-dark:#633806;
+    --err-light:#FCEBEB; --err-border:#F09595; --err-dark:#A32D2D;
+    --bg:#ffffff; --bg2:#f5f5f3; --bg3:#eeede9;
+    --text:#1a1a1a; --text2:#666; --text3:#999;
+    --border:rgba(0,0,0,0.12); --border2:rgba(0,0,0,0.22);
+    --radius:10px; --radius-sm:6px;
+    --safe-top:env(safe-area-inset-top,0px);
+    --safe-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media(prefers-color-scheme:dark){
+    :root{
+      --bg:#1c1c1e; --bg2:#2c2c2e; --bg3:#3a3a3c;
+      --text:#f2f2f7; --text2:#aeaeb2; --text3:#636366;
+      --border:rgba(255,255,255,0.12); --border2:rgba(255,255,255,0.22);
+      --green-light:#0a3326; --green-border:#1D9E75; --green-dark:#5DCAA5;
+      --red-light:#3a1a0e; --red-border:#D85A30; --red-dark:#F0997B;
+      --blue-light:#0a1f35; --blue-border:#378ADD; --blue-dark:#85B7EB;
+      --amber-light:#2a1a00; --amber-border:#BA7517; --amber-dark:#FAC775;
+      --err-light:#2a0a0a; --err-border:#E24B4A; --err-dark:#F09595;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;background:var(--bg3);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text)}
+  body{display:flex;flex-direction:column;overflow:hidden;padding-top:var(--safe-top)}
+  .topbar{background:var(--bg);border-bottom:.5px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .topbar h1{font-size:17px;font-weight:600;flex:1}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);flex-shrink:0}
+  .live-dot.active{background:var(--green);animation:pulse 1.5s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .topbar-btn{background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;padding:4px 8px;border-radius:var(--radius-sm)}
+  .topbar-btn:active{background:var(--bg2)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);background:var(--bg);border-bottom:.5px solid var(--border);flex-shrink:0}
+  .stat{padding:8px 4px;text-align:center;border-right:.5px solid var(--border)}
+  .stat:last-child{border-right:none}
+  .stat .lbl{font-size:10px;color:var(--text3);margin-bottom:2px}
+  .stat .val{font-size:18px;font-weight:600}
+  .val.green{color:var(--green)}
+  .val.red{color:var(--red)}
+  .nav{display:flex;background:var(--bg);border-bottom:.5px solid var(--border);flex-shrink:0}
+  .nav button{flex:1;border:none;background:transparent;padding:10px 4px 8px;font-size:11px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px}
+  .nav button .ico{font-size:18px}
+  .nav button.active{color:var(--green);border-bottom-color:var(--green)}
+  .content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px calc(12px + var(--safe-bottom));display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--bg);border-radius:var(--radius);border:.5px solid var(--border);overflow:hidden}
+  .card-title{font-size:12px;font-weight:600;color:var(--text2);padding:10px 14px 0;text-transform:uppercase;letter-spacing:.5px}
+  .mode-toggle{display:flex;margin:10px 14px;border:.5px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+  .mode-toggle button{flex:1;border:none;background:transparent;padding:9px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text2)}
+  .mode-toggle button.active{background:var(--text);color:var(--bg)}
+  .cam-wrap{position:relative;width:100%;aspect-ratio:1;background:#000;overflow:hidden}
+  #cam-video{width:100%;height:100%;object-fit:cover;display:block}
+  .scan-frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .scan-box{width:55%;aspect-ratio:1;border:2px solid var(--green);border-radius:8px;position:relative}
+  .scan-line{position:absolute;left:0;right:0;height:2px;background:var(--green);animation:scanline 2s linear infinite}
+  @keyframes scanline{0%{top:0}100%{top:100%}}
+  .cam-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#888;font-size:14px}
+  #qr-canvas{display:none}
+  .btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 16px;border-radius:var(--radius-sm);font-size:14px;font-weight:500;cursor:pointer;border:none;width:100%}
+  .btn-primary{background:var(--green-light);color:var(--green-dark);border:.5px solid var(--green-border)}
+  .btn-danger{background:var(--red-light);color:var(--red-dark);border:.5px solid var(--red-border)}
+  .btn-neutral{background:var(--bg2);color:var(--text);border:.5px solid var(--border2)}
+  .btn-blue{background:var(--blue-light);color:var(--blue-dark);border:.5px solid var(--blue-border)}
+  .btn:active{opacity:.75}
+  .btn-row{display:flex;gap:8px;padding:10px 14px}
+  .btn-row .btn{flex:1}
+  .field{padding:0 14px 10px;display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:12px;color:var(--text2);font-weight:500}
+  .field input,.field select{padding:10px 12px;border:.5px solid var(--border2);border-radius:var(--radius-sm);font-size:15px;background:var(--bg2);color:var(--text);outline:none;width:100%;-webkit-appearance:none}
+  .field input:focus{border-color:var(--green)}
+  .feedback{margin:0 14px 10px;padding:10px 12px;border-radius:var(--radius-sm);font-size:13px;display:flex;align-items:center;gap:8px}
+  .feedback.in{background:var(--green-light);color:var(--green-dark);border:.5px solid var(--green-border)}
+  .feedback.out{background:var(--red-light);color:var(--red-dark);border:.5px solid var(--red-border)}
+  .feedback.err{background:var(--err-light);color:var(--err-dark);border:.5px solid var(--err-border)}
+  .feedback.added{background:var(--blue-light);color:var(--blue-dark);border:.5px solid var(--blue-border)}
+  .inv-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:.5px solid var(--border)}
+  .inv-item:last-child{border-bottom:none}
+  .inv-info{flex:1;min-width:0}
+  .inv-name{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .inv-name-input{font-size:14px;font-weight:500;width:100%;padding:2px 6px;border:.5px solid var(--green);border-radius:4px;background:var(--bg2);color:var(--text);outline:none}
+  .inv-sub{font-size:11px;color:var(--text3);margin-top:1px}
+  .inv-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+  .pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px}
+  .pill-in{background:var(--green-light);color:var(--green-dark)}
+  .pill-out{background:var(--red-light);color:var(--red-dark)}
+  .edit-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;font-size:16px;line-height:1}
+  /* Per-item log */
+  .item-log{background:var(--bg2);border-top:.5px solid var(--border);padding:8px 14px;display:none}
+  .item-log.open{display:block}
+  .item-log-entry{font-size:11px;color:var(--text2);padding:3px 0;display:flex;gap:8px;border-bottom:.5px solid var(--border)}
+  .item-log-entry:last-child{border-bottom:none}
+  .item-log-dot{width:6px;height:6px;border-radius:50%;margin-top:3px;flex-shrink:0}
+  .item-log-dot.in{background:var(--green)}
+  .item-log-dot.out{background:var(--red)}
+  .item-log-dot.added{background:#378ADD}
+  /* Log tab */
+  .log-item{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-bottom:.5px solid var(--border)}
+  .log-item:last-child{border-bottom:none}
+  .log-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
+  .log-dot.in{background:var(--green)}
+  .log-dot.out{background:var(--red)}
+  .log-dot.added{background:#378ADD}
+  .log-text{flex:1;font-size:13px}
+  .log-name{font-weight:500}
+  .log-action{color:var(--text2)}
+  .log-time{font-size:11px;color:var(--text3);white-space:nowrap;margin-top:2px}
+  .filter-tabs{display:flex;gap:6px;padding:10px 14px 0;flex-wrap:wrap}
+  .filter-tab{border:.5px solid var(--border2);background:transparent;border-radius:20px;padding:4px 12px;font-size:12px;cursor:pointer;color:var(--text2)}
+  .filter-tab.active{background:var(--text);color:var(--bg);border-color:var(--text)}
+  .empty{text-align:center;padding:32px 16px;color:var(--text3);font-size:14px}
+  .cam-status{font-size:12px;color:var(--text3);text-align:center;padding:6px 14px}
+  .manual-row{display:flex;gap:8px;padding:0 14px 12px}
+  .manual-row input{flex:1;padding:10px 12px;border:.5px solid var(--border2);border-radius:var(--radius-sm);font-size:14px;background:var(--bg2);color:var(--text);outline:none}
+  .manual-row button{padding:10px 16px;border-radius:var(--radius-sm);font-size:14px;font-weight:500;cursor:pointer;border:.5px solid var(--border2);background:var(--bg2);color:var(--text);white-space:nowrap}
+  .divider{height:.5px;background:var(--border);margin:4px 0 10px}
+  .offline-badge{font-size:11px;background:var(--blue-light);color:var(--blue-dark);border:.5px solid var(--blue-border);border-radius:20px;padding:2px 8px}
+  .hint{padding:0 14px 12px;font-size:12px;color:var(--text3);line-height:1.6}
+  code{font-size:11px;background:var(--bg2);padding:2px 5px;border-radius:4px;font-family:monospace}
+  /* Import drop zone */
+  .drop-zone{margin:0 14px 12px;border:1.5px dashed var(--border2);border-radius:var(--radius-sm);padding:20px;text-align:center;cursor:pointer;color:var(--text2);font-size:13px;transition:border-color .2s,background .2s}
+  .drop-zone:hover,.drop-zone.over{border-color:var(--green);background:var(--green-light);color:var(--green-dark)}
+  .drop-zone input[type=file]{display:none}
+  /* Print / PDF styles */
+  @media print {
+    .topbar,.stats,.nav,.btn,.btn-row,.filter-tabs,.mode-toggle,.cam-wrap,.cam-status,.manual-row,.divider,.edit-btn,.offline-badge,.item-log,.feedback{display:none!important}
+    body{overflow:auto;background:#fff;color:#000;font-size:12px}
+    .content{overflow:visible;padding:0}
+    .card{border:1px solid #ccc;border-radius:0;margin-bottom:12px;break-inside:avoid}
+    .log-item,.inv-item{padding:6px 10px}
+    .pill,.log-dot,.item-log-dot{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="live-dot" id="live-dot"></div>
+  <h1>Inventory</h1>
+  <span class="offline-badge" id="offline-badge">offline</span>
+  <button class="topbar-btn" onclick="exportCSV()">CSV</button>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="lbl">Items</div><div class="val" id="s-total">0</div></div>
+  <div class="stat"><div class="lbl">In</div><div class="val green" id="s-in">0</div></div>
+  <div class="stat"><div class="lbl">Out</div><div class="val red" id="s-out">0</div></div>
+  <div class="stat"><div class="lbl">Events</div><div class="val" id="s-tx">0</div></div>
+</div>
+
+<div class="nav">
+  <button class="active" id="nav-scan" onclick="showTab('scan')"><span class="ico">⬛</span>Scan</button>
+  <button id="nav-add" onclick="showTab('add')"><span class="ico">＋</span>Add</button>
+  <button id="nav-import" onclick="showTab('import')"><span class="ico">📂</span>Import</button>
+  <button id="nav-inv" onclick="showTab('inv')"><span class="ico">📦</span>Items</button>
+  <button id="nav-log" onclick="showTab('log')"><span class="ico">📋</span>Log</button>
+  <button id="nav-settings" onclick="showTab('settings')"><span class="ico">⚙</span>More</button>
+</div>
+
+<div class="content" id="content"></div>
+
+<script>
+(function(){
+  function loadScript(src,cb){var s=document.createElement('script');s.src=src;s.onload=cb;s.onerror=cb;document.head.appendChild(s)}
+  loadScript('./jsqr.min.js',function(){
+    if(typeof jsQR!=='undefined') return;
+    loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js',function(){});
+  });
+})();
+</script>
+<script>
+const STORE='inv_pwa_v2';
+let inventory={}, log=[], mode='in', logFilter='all';
+let stream=null, rafId=null, lastCode=null, lastCodeTime=0;
+const DEBOUNCE=2500;
+let currentTab='scan', lastFeedback=null;
+
+// ── Storage ──
+function loadData(){
+  try{
+    const d=JSON.parse(localStorage.getItem(STORE)||'{}');
+    inventory=d.inventory||{};
+    // Migrate old items that have qty instead of status
+    Object.values(inventory).forEach(item=>{
+      if(item.status===undefined) item.status='in';
+      if(!item.history) item.history=[];
+    });
+    log=(d.log||[]).map(l=>({...l,time:new Date(l.time)}));
+  }catch(e){}
+}
+function saveData(){
+  try{localStorage.setItem(STORE,JSON.stringify({inventory,log}))}catch(e){}
+}
+
+// ── Online indicator ──
+function updateOnline(){
+  const b=document.getElementById('offline-badge');
+  if(b) b.style.display=navigator.onLine?'none':'';
+}
+window.addEventListener('online',updateOnline);
+window.addEventListener('offline',updateOnline);
+updateOnline();
+
+// ── Camera ──
+let video,canvas,ctx;
+function initCamera(){
+  video=document.getElementById('cam-video');
+  canvas=document.getElementById('qr-canvas');
+  if(!canvas) return;
+  ctx=canvas.getContext('2d',{willReadFrequently:true});
+}
+async function startCam(){
+  initCamera();
+  if(!video) return;
+  try{
+    setStatus('Requesting camera…');
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+    video.srcObject=stream;
+    video.onloadedmetadata=()=>{
+      const ph=document.getElementById('cam-placeholder');
+      const sf=document.getElementById('scan-frame');
+      if(ph) ph.style.display='none';
+      if(sf) sf.style.display='flex';
+      const bs=document.getElementById('btn-start'), bp=document.getElementById('btn-stop');
+      if(bs) bs.style.display='none';
+      if(bp) bp.style.display='';
+      document.getElementById('live-dot').classList.add('active');
+      setStatus('Point camera at a QR code');
+      scanLoop();
+    };
+  }catch(e){setStatus('Camera denied. Use manual entry below.');}
+}
+function stopCam(){
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  if(rafId){cancelAnimationFrame(rafId);rafId=null;}
+  if(video) video.srcObject=null;
+  document.getElementById('live-dot').classList.remove('active');
+  const ph=document.getElementById('cam-placeholder'),sf=document.getElementById('scan-frame');
+  if(ph) ph.style.display='flex';
+  if(sf) sf.style.display='none';
+  const bs=document.getElementById('btn-start'),bp=document.getElementById('btn-stop');
+  if(bs) bs.style.display='';
+  if(bp) bp.style.display='none';
+  setStatus('Camera stopped.');
+}
+function setStatus(t){const el=document.getElementById('cam-status');if(el)el.textContent=t;}
+function scanLoop(){
+  if(!stream) return;
+  if(video&&video.readyState===video.HAVE_ENOUGH_DATA&&canvas){
+    canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    if(typeof jsQR!=='undefined'){
+      const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+      const result=jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
+      if(result){
+        const code=result.data.trim(), now=Date.now();
+        if(code!==lastCode||now-lastCodeTime>DEBOUNCE){lastCode=code;lastCodeTime=now;processCode(code);}
+      }
+    }
+  }
+  rafId=requestAnimationFrame(scanLoop);
+}
+
+// ── Parse pipe-delimited: "Name | CODE | Notes" ──
+function parseQR(raw){
+  const parts=raw.split('|').map(s=>s.trim());
+  const name=parts[0]||raw.trim();
+  const code=(parts[1]||name).toUpperCase().replace(/\s+/g,'-');
+  const notes=parts[2]||'';
+  return{name,code,notes};
+}
+
+// ── Core logic ──
+function processCode(raw){
+  const {name,code,notes}=parseQR(raw);
+  const isNew=!inventory[code];
+  if(isNew) inventory[code]={name,notes,status:'in',total:0,history:[]};
+  const item=inventory[code];
+  if(!isNew&&name!==code) item.name=name;
+  if(!isNew&&notes) item.notes=notes;
+
+  const now=new Date();
+  if(mode==='in'){
+    if(item.status==='in'){showFeedback('err',`Already checked in: ${item.name}`);return;}
+    item.status='in'; item.total++;
+    item.history.push({action:'in',time:now.toISOString()});
+    showFeedback('in',`${isNew?'Added & checked in':'Checked in'}: ${item.name}`);
+    log.unshift({code,name:item.name,action:'in',time:now});
+  }else{
+    if(item.status==='out'){showFeedback('err',`Already checked out: ${item.name}`);return;}
+    item.status='out';
+    item.history.push({action:'out',time:now.toISOString()});
+    showFeedback('out',`Checked out: ${item.name}`);
+    log.unshift({code,name:item.name,action:'out',time:now});
+  }
+  saveData(); renderStats();
+  if(currentTab==='inv') renderTab('inv');
+  if(currentTab==='log') renderTab('log');
+}
+
+// ── Add item manually ──
+function addItem(){
+  const name=document.getElementById('add-name').value.trim();
+  if(!name){showFeedback('err','Item name is required.');return;}
+  let code=(document.getElementById('add-code').value.trim()||'').toUpperCase().replace(/\s+/g,'-');
+  if(!code) code='ITEM-'+Date.now().toString(36).toUpperCase();
+  if(inventory[code]){showFeedback('err',`Code "${code}" already exists.`);return;}
+  const notes=document.getElementById('add-notes').value.trim();
+  const now=new Date();
+  inventory[code]={name,notes,status:'in',total:0,history:[{action:'added',time:now.toISOString()}]};
+  log.unshift({code,name,action:'added',time:now});
+  showFeedback('added',`Added: ${name} (${code})`);
+  ['add-name','add-code','add-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('add-name').focus();
+  saveData(); renderStats();
+}
+
+// ── CSV Import ──
+function handleImportFile(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const lines=e.target.result.split(/\r?\n/).filter(l=>l.trim()&&!l.trim().startsWith('#'));
+    let added=0,skipped=0;
+    lines.forEach(line=>{
+      // Support comma-separated or pipe-separated
+      const raw=line.includes('|')?line:line.split(',').join('|');
+      const {name,code,notes}=parseQR(raw);
+      if(!name||!code) return;
+      if(inventory[code]){skipped++;return;}
+      inventory[code]={name,notes,status:'in',total:0,history:[{action:'added',time:new Date().toISOString()}]};
+      log.unshift({code,name,action:'added',time:new Date()});
+      added++;
+    });
+    saveData(); renderStats(); renderTab('import');
+    const fb=document.getElementById('import-feedback');
+    if(fb){
+      fb.className='feedback added';
+      fb.style.display='flex';
+      fb.textContent=`Imported ${added} item${added!==1?'s':''}${skipped?`, skipped ${skipped} duplicate${skipped!==1?'s':''}`:''}.`;
+    }
+  };
+  reader.readAsText(file);
+}
+function setupDropZone(){
+  const zone=document.getElementById('drop-zone');
+  const inp=document.getElementById('file-input');
+  if(!zone||!inp) return;
+  zone.addEventListener('click',()=>inp.click());
+  inp.addEventListener('change',()=>{if(inp.files[0]) handleImportFile(inp.files[0]);});
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('over');});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('over'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('over');if(e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]);});
+}
+
+// ── Feedback ──
+function showFeedback(type,msg){
+  lastFeedback={type,msg};
+  const el=document.getElementById('feedback-strip');
+  if(!el) return;
+  el.className='feedback '+type; el.textContent=msg; el.style.display='flex';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{el.style.display='none';lastFeedback=null;},3200);
+}
+
+// ── Rename ──
+function startRename(code){
+  const el=document.getElementById('inv-name-'+code);
+  if(!el) return;
+  const cur=inventory[code].name;
+  el.innerHTML=`<input class="inv-name-input" id="edit-${code}" value="${esc(cur)}" />`;
+  const inp=document.getElementById('edit-'+code);
+  inp.focus(); inp.select();
+  const commit=()=>{const v=inp.value.trim();if(v)inventory[code].name=v;saveData();renderTab('inv');};
+  inp.addEventListener('blur',commit);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=cur;inp.blur();}});
+}
+
+// ── Toggle per-item history ──
+function toggleHistory(code){
+  const el=document.getElementById('hist-'+code);
+  if(!el) return;
+  el.classList.toggle('open');
+}
+
+// ── Tabs ──
+function showTab(tab){
+  if(currentTab==='scan'&&tab!=='scan') stopCam();
+  currentTab=tab;
+  ['scan','add','import','inv','log','settings'].forEach(t=>{
+    const btn=document.getElementById('nav-'+t);
+    if(btn) btn.className=t===tab?'active':'';
+  });
+  renderTab(tab);
+  if(tab==='scan') setTimeout(initCamera,50);
+}
+
+function renderTab(tab){
+  const c=document.getElementById('content');
+  if(tab==='scan')     c.innerHTML=scanHTML();
+  else if(tab==='add') c.innerHTML=addHTML();
+  else if(tab==='import') c.innerHTML=importHTML();
+  else if(tab==='inv') c.innerHTML=invHTML();
+  else if(tab==='log') c.innerHTML=logHTML();
+  else if(tab==='settings') c.innerHTML=settingsHTML();
+
+  if(tab==='scan'){
+    initCamera();
+    const mi=document.getElementById('manual-input');
+    if(mi) mi.addEventListener('keydown',e=>{if(e.key==='Enter')manualGo();});
+    if(lastFeedback) showFeedback(lastFeedback.type,lastFeedback.msg);
+  }
+  if(tab==='add'){
+    const an=document.getElementById('add-notes');
+    if(an) an.addEventListener('keydown',e=>{if(e.key==='Enter')addItem();});
+    if(lastFeedback) showFeedback(lastFeedback.type,lastFeedback.msg);
+  }
+  if(tab==='import') setupDropZone();
+  renderStats();
+}
+
+// ── HTML builders ──
+function scanHTML(){
+  return `
+    <div class="card">
+      <div class="mode-toggle">
+        <button class="${mode==='in'?'active':''}" onclick="setMode('in')">⬇ Check in</button>
+        <button class="${mode==='out'?'active':''}" onclick="setMode('out')">⬆ Check out</button>
+      </div>
+      <div class="cam-wrap">
+        <video id="cam-video" autoplay playsinline muted></video>
+        <div class="scan-frame" id="scan-frame" style="display:none">
+          <div class="scan-box"><div class="scan-line"></div></div>
+        </div>
+        <div class="cam-placeholder" id="cam-placeholder">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="4" height="4" rx=".5"/><rect x="20" y="14" width="2" height="2"/><rect x="14" y="20" width="2" height="2"/><rect x="18" y="18" width="4" height="4" rx=".5"/></svg>
+          <span>Tap to start camera</span>
+        </div>
+        <canvas id="qr-canvas"></canvas>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-start" onclick="startCam()">▶ Start camera</button>
+        <button class="btn btn-danger" id="btn-stop" onclick="stopCam()" style="display:none">■ Stop</button>
+      </div>
+      <div class="cam-status" id="cam-status">Tap "Start camera" and allow access</div>
+      <div class="divider"></div>
+      <div style="padding:0 14px 4px;font-size:12px;color:var(--text3)">Manual entry:</div>
+      <div class="manual-row">
+        <input type="text" id="manual-input" placeholder="Type or paste code…" />
+        <button onclick="manualGo()">Log</button>
+      </div>
+      <div class="feedback" id="feedback-strip" style="display:none"></div>
+    </div>`;
+}
+
+function addHTML(){
+  return `
+    <div class="card">
+      <div class="card-title" style="padding-bottom:8px">New item</div>
+      <div class="hint">Or encode a QR as: <code>Item Name | CODE | Notes</code> — scanning auto-adds it.</div>
+      <div class="field"><label>Item name *</label><input type="text" id="add-name" placeholder='e.g. Dell Laptop 15"' /></div>
+      <div class="field"><label>Code / SKU (auto if blank)</label><input type="text" id="add-code" placeholder="e.g. LAPTOP-001" /></div>
+      <div class="field"><label>Notes (optional)</label><input type="text" id="add-notes" placeholder="Serial #, location…" /></div>
+      <div class="btn-row"><button class="btn btn-primary" onclick="addItem()">＋ Add to inventory</button></div>
+      <div class="feedback" id="feedback-strip" style="display:none"></div>
+    </div>`;
+}
+
+function importHTML(){
+  return `
+    <div class="card">
+      <div class="card-title" style="padding-bottom:8px">Import from CSV</div>
+      <div class="hint">
+        Each line: <code>Item Name | CODE | Notes</code><br>
+        Comma-separated also works: <code>Item Name, CODE, Notes</code><br>
+        All imported items default to <strong>checked in</strong>. Duplicates are skipped.
+      </div>
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept=".csv,.txt" />
+        📂 Tap to choose a CSV file<br>
+        <span style="font-size:11px;color:var(--text3)">or drag and drop here</span>
+      </div>
+      <div class="feedback" id="import-feedback" style="display:none"></div>
+    </div>`;
+}
+
+function invHTML(){
+  const entries=Object.entries(inventory);
+  if(!entries.length) return `<div class="card"><div class="empty">No items yet.<br>Add one, import a CSV, or scan a QR.</div></div>`;
+  return `<div class="card">`+entries.map(([code,item])=>{
+    const isOut=item.status==='out';
+    const statusPill=`<span class="pill ${isOut?'pill-out':'pill-in'}">${isOut?'out':'in'}</span>`;
+    const sub=[item.notes,item.name!==code?code:''].filter(Boolean).join(' · ');
+    const hist=item.history||[];
+    const histHTML=hist.length?hist.slice().reverse().map(h=>{
+      const t=new Date(h.time);
+      const ts=t.toLocaleDateString([],{month:'short',day:'numeric'})+' '+t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+      const label=h.action==='in'?'checked in':h.action==='out'?'checked out':'added';
+      return `<div class="item-log-entry"><div class="item-log-dot ${h.action}"></div><span>${label} — ${ts}</span></div>`;
+    }).join(''):'<div style="font-size:11px;color:var(--text3);padding:4px 0">No history yet.</div>';
+    return `
+      <div class="inv-item">
+        <div class="inv-info">
+          <div class="inv-name" id="inv-name-${code}">${esc(item.name)}</div>
+          ${sub?`<div class="inv-sub">${esc(sub)}</div>`:''}
+        </div>
+        <div class="inv-right">
+          ${statusPill}
+          <button class="edit-btn" onclick="toggleHistory('${code}')" title="Show history">⏱</button>
+          <button class="edit-btn" onclick="startRename('${code}')">✎</button>
+        </div>
+      </div>
+      <div class="item-log" id="hist-${code}">${histHTML}</div>`;
+  }).join('')+`</div>`;
+}
+
+function logHTML(){
+  const filtered=logFilter==='all'?log:log.filter(l=>l.action===logFilter);
+  return `
+    <div class="card">
+      <div class="filter-tabs">
+        ${['all','in','out','added'].map(f=>
+          `<button class="filter-tab ${logFilter===f?'active':''}" onclick="setLogFilter('${f}')">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`
+        ).join('')}
+      </div>
+      ${filtered.length?filtered.slice(0,200).map(l=>{
+        const ts=l.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        const date=l.time.toLocaleDateString([],{month:'short',day:'numeric'});
+        const action=l.action==='in'?'checked in':l.action==='out'?'checked out':'added';
+        return `<div class="log-item">
+          <div class="log-dot ${l.action}"></div>
+          <div class="log-text"><span class="log-name">${esc(l.name)}</span> <span class="log-action">${action}</span>
+          <div class="log-time">${date} ${ts}</div></div>
+        </div>`;
+      }).join(''):`<div class="empty">No activity yet.</div>`}
+    </div>`;
+}
+
+function settingsHTML(){
+  return `
+    <div class="card">
+      <div class="card-title" style="padding-bottom:10px">Export inventory</div>
+      <div class="btn-row"><button class="btn btn-neutral" onclick="exportCSV()">⬇ Inventory CSV</button></div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="padding-bottom:10px">Export activity log</div>
+      <div class="btn-row">
+        <button class="btn btn-neutral" onclick="exportLogCSV()">⬇ Log CSV</button>
+        <button class="btn btn-neutral" onclick="exportLogTXT()">⬇ Log TXT</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-blue" onclick="exportLogPDF()">⬇ Log PDF</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="padding-bottom:10px">Danger zone</div>
+      <div class="btn-row"><button class="btn" style="background:var(--err-light);color:var(--err-dark);border:.5px solid var(--err-border)" onclick="clearAll()">🗑 Clear all data</button></div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="padding-bottom:10px">Install as app</div>
+      <div style="padding:0 14px 14px;font-size:13px;color:var(--text2);line-height:1.7">
+        <strong>iOS Safari:</strong> Share → "Add to Home Screen"<br>
+        <strong>Android Chrome:</strong> ⋮ → "Install app"<br>
+        Works fully offline once installed.
+      </div>
+    </div>`;
+}
+
+// ── Stats ──
+function renderStats(){
+  const items=Object.values(inventory);
+  document.getElementById('s-total').textContent=items.length;
+  document.getElementById('s-in').textContent=items.filter(i=>i.status==='in').length;
+  document.getElementById('s-out').textContent=items.filter(i=>i.status==='out').length;
+  document.getElementById('s-tx').textContent=log.length;
+}
+
+function setMode(m){
+  mode=m; renderTab('scan');
+  setTimeout(()=>{if(stream) initCamera();},50);
+}
+function setLogFilter(f){logFilter=f;renderTab('log');}
+function manualGo(){
+  const inp=document.getElementById('manual-input');
+  const v=inp?inp.value.trim():'';
+  if(!v) return;
+  processCode(v);
+  if(inp) inp.value='';
+}
+
+// ── Export: inventory CSV ──
+function exportCSV(){
+  const rows=[['Code','Name','Notes','Status','Total Check-ins']];
+  Object.entries(inventory).forEach(([code,item])=>{
+    rows.push([code,item.name,item.notes||'',item.status,item.total]);
+  });
+  downloadFile(rowsToCSV(rows),`inventory_${dateStamp()}.csv`,'text/csv');
+}
+
+// ── Export: log CSV ──
+function exportLogCSV(){
+  const rows=[['Date','Time','Code','Name','Action']];
+  log.forEach(l=>rows.push([
+    l.time.toLocaleDateString([],{year:'numeric',month:'2-digit',day:'2-digit'}),
+    l.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+    l.code, l.name,
+    l.action==='in'?'Checked in':l.action==='out'?'Checked out':'Added'
+  ]));
+  downloadFile(rowsToCSV(rows),`activity_log_${dateStamp()}.csv`,'text/csv');
+}
+
+// ── Export: log TXT ──
+function exportLogTXT(){
+  const lines=[
+    `INVENTORY ACTIVITY LOG`,
+    `Exported: ${new Date().toLocaleString()}`,
+    `${'─'.repeat(50)}`,
+    ''
+  ];
+  log.forEach(l=>{
+    const date=l.time.toLocaleDateString([],{weekday:'short',year:'numeric',month:'short',day:'numeric'});
+    const time=l.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const action=l.action==='in'?'CHECK IN ':l.action==='out'?'CHECK OUT':'ADDED    ';
+    lines.push(`[${action}] ${date} ${time}  —  ${l.name} (${l.code})`);
+  });
+  lines.push('');
+  lines.push(`Total events: ${log.length}`);
+  downloadFile(lines.join('\n'),`activity_log_${dateStamp()}.txt`,'text/plain');
+}
+
+// ── Export: log PDF (print-to-PDF via browser) ──
+function exportLogPDF(){
+  const date=new Date().toLocaleString();
+  const rows=log.map(l=>{
+    const d=l.time.toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'});
+    const t=l.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const action=l.action==='in'?'Checked in':l.action==='out'?'Checked out':'Added';
+    const col=l.action==='in'?'#0F6E56':l.action==='out'?'#993C1D':'#0C447C';
+    return `<tr>
+      <td>${esc(d)} ${esc(t)}</td>
+      <td style="font-weight:600">${esc(l.name)}</td>
+      <td style="font-family:monospace;font-size:11px">${esc(l.code)}</td>
+      <td style="color:${col};font-weight:600">${action}</td>
+    </tr>`;
+  }).join('');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+  <title>Activity Log</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;color:#1a1a1a;margin:32px}
+    h1{font-size:18px;margin-bottom:4px}
+    .meta{color:#888;font-size:11px;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse}
+    th{text-align:left;font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.5px;padding:6px 10px;background:#f5f5f3;border-bottom:1px solid #ddd}
+    td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:top}
+    tr:last-child td{border-bottom:none}
+    @media print{body{margin:16px}h1{font-size:15px}}
+  </style></head><body>
+  <h1>Activity Log</h1>
+  <div class="meta">Exported ${date} · ${log.length} event${log.length!==1?'s':''}</div>
+  <table>
+    <thead><tr><th>Date / Time</th><th>Item</th><th>Code</th><th>Action</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  </body></html>`;
+  const w=window.open('','_blank','width=900,height=700');
+  if(!w){alert('Pop-up blocked. Please allow pop-ups and try again.');return;}
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(),400);
+}
+
+// ── Helpers ──
+function rowsToCSV(rows){
+  return rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+}
+function downloadFile(content,filename,type){
+  const blob=new Blob([content],{type});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+}
+function dateStamp(){return new Date().toISOString().slice(0,10);}
+function clearAll(){
+  if(!confirm('Clear all data? This cannot be undone.')) return;
+  inventory={}; log=[];
+  localStorage.removeItem(STORE);
+  renderTab(currentTab); renderStats();
+}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── Service Worker ──
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+
+// ── Init ──
+loadData();
+renderTab('scan');
+</script>
+</body>
+</html>
