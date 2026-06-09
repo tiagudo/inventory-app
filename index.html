@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Inventory" />
+<meta name="theme-color" content="#1D9E75" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<title>Inventory Control</title>
+<style>
+  :root {
+    --green: #1D9E75; --green-light: #E1F5EE; --green-border: #5DCAA5; --green-dark: #0F6E56;
+    --red: #D85A30; --red-light: #FAECE7; --red-border: #F0997B; --red-dark: #993C1D;
+    --blue-light: #E6F1FB; --blue-border: #85B7EB; --blue-dark: #0C447C;
+    --amber-light: #FAEEDA; --amber-border: #EF9F27; --amber-dark: #633806;
+    --err-light: #FCEBEB; --err-border: #F09595; --err-dark: #A32D2D;
+    --bg: #ffffff; --bg2: #f5f5f3; --bg3: #eeede9;
+    --text: #1a1a1a; --text2: #666; --text3: #999;
+    --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+    --radius: 10px; --radius-sm: 6px;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e; --bg2: #2c2c2e; --bg3: #3a3a3c;
+      --text: #f2f2f7; --text2: #aeaeb2; --text3: #636366;
+      --border: rgba(255,255,255,0.12); --border2: rgba(255,255,255,0.22);
+      --green-light: #0a3326; --green-border: #1D9E75; --green-dark: #5DCAA5;
+      --red-light: #3a1a0e; --red-border: #D85A30; --red-dark: #F0997B;
+      --blue-light: #0a1f35; --blue-border: #378ADD; --blue-dark: #85B7EB;
+      --amber-light: #2a1a00; --amber-border: #BA7517; --amber-dark: #FAC775;
+      --err-light: #2a0a0a; --err-border: #E24B4A; --err-dark: #F09595;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; background: var(--bg3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--text); }
+  body { display: flex; flex-direction: column; overflow: hidden; padding-top: var(--safe-top); }
+
+  /* Top bar */
+  .topbar { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 10px 16px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .topbar h1 { font-size: 17px; font-weight: 600; flex: 1; }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  .live-dot.active { background: var(--green); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+  .topbar-btn { background: none; border: none; color: var(--text2); font-size: 13px; cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); }
+  .topbar-btn:active { background: var(--bg2); }
+
+  /* Stats bar */
+  .stats { display: grid; grid-template-columns: repeat(4,1fr); background: var(--bg); border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+  .stat { padding: 8px 4px; text-align: center; border-right: 0.5px solid var(--border); }
+  .stat:last-child { border-right: none; }
+  .stat .lbl { font-size: 10px; color: var(--text3); margin-bottom: 2px; }
+  .stat .val { font-size: 18px; font-weight: 600; }
+  .val.green { color: var(--green); }
+  .val.red { color: var(--red); }
+
+  /* Nav tabs */
+  .nav { display: flex; background: var(--bg); border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+  .nav button { flex: 1; border: none; background: transparent; padding: 10px 4px 8px; font-size: 11px; color: var(--text3); cursor: pointer; border-bottom: 2px solid transparent; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .nav button .ico { font-size: 20px; }
+  .nav button.active { color: var(--green); border-bottom-color: var(--green); }
+
+  /* Scrollable content */
+  .content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 12px calc(12px + var(--safe-bottom)); display: flex; flex-direction: column; gap: 12px; }
+
+  /* Cards */
+  .card { background: var(--bg); border-radius: var(--radius); border: 0.5px solid var(--border); overflow: hidden; }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--text2); padding: 10px 14px 0; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* Mode toggle */
+  .mode-toggle { display: flex; margin: 10px 14px; border: 0.5px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+  .mode-toggle button { flex: 1; border: none; background: transparent; padding: 9px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text2); }
+  .mode-toggle button.active { background: var(--text); color: var(--bg); }
+
+  /* Camera */
+  .cam-wrap { position: relative; width: 100%; aspect-ratio: 1; background: #000; overflow: hidden; }
+  #cam-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .scan-frame { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+  .scan-box { width: 55%; aspect-ratio: 1; border: 2px solid var(--green); border-radius: 8px; position: relative; }
+  .scan-line { position: absolute; left: 0; right: 0; height: 2px; background: var(--green); animation: scanline 2s linear infinite; }
+  @keyframes scanline { 0%{top:0}100%{top:100%} }
+  .cam-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #888; font-size: 14px; }
+  .cam-placeholder svg { opacity: .5; }
+  #qr-canvas { display: none; }
+
+  /* Buttons */
+  .btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 16px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; cursor: pointer; border: none; width: 100%; }
+  .btn-primary { background: var(--green-light); color: var(--green-dark); border: 0.5px solid var(--green-border); }
+  .btn-danger { background: var(--red-light); color: var(--red-dark); border: 0.5px solid var(--red-border); }
+  .btn-neutral { background: var(--bg2); color: var(--text); border: 0.5px solid var(--border2); }
+  .btn:active { opacity: .75; }
+  .btn-row { display: flex; gap: 8px; padding: 10px 14px; }
+  .btn-row .btn { flex: 1; }
+
+  /* Inputs */
+  .field { padding: 0 14px 10px; display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--text2); font-weight: 500; }
+  .field input { padding: 10px 12px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); font-size: 15px; background: var(--bg2); color: var(--text); outline: none; width: 100%; -webkit-appearance: none; }
+  .field input:focus { border-color: var(--green); }
+  .field-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 14px 10px; }
+  .field-row2 .field { padding: 0; }
+
+  /* Feedback strip */
+  .feedback { margin: 0 14px 10px; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .feedback.in { background: var(--green-light); color: var(--green-dark); border: 0.5px solid var(--green-border); }
+  .feedback.out { background: var(--red-light); color: var(--red-dark); border: 0.5px solid var(--red-border); }
+  .feedback.err { background: var(--err-light); color: var(--err-dark); border: 0.5px solid var(--err-border); }
+  .feedback.added { background: var(--blue-light); color: var(--blue-dark); border: 0.5px solid var(--blue-border); }
+
+  /* Inventory list */
+  .inv-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 0.5px solid var(--border); }
+  .inv-item:last-child { border-bottom: none; }
+  .inv-info { flex: 1; min-width: 0; }
+  .inv-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .inv-name-input { font-size: 14px; font-weight: 500; width: 100%; padding: 2px 6px; border: 0.5px solid var(--green); border-radius: 4px; background: var(--bg2); color: var(--text); outline: none; }
+  .inv-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+  .inv-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+  .pill-in { background: var(--green-light); color: var(--green-dark); }
+  .pill-out { background: var(--red-light); color: var(--red-dark); }
+  .pill-low { background: var(--amber-light); color: var(--amber-dark); }
+  .qty-badge { font-size: 14px; font-weight: 600; min-width: 28px; text-align: center; }
+  .qty-badge.zero { color: var(--err-dark); }
+  .qty-badge.low { color: var(--amber-dark); }
+  .edit-btn { background: none; border: none; color: var(--text3); cursor: pointer; padding: 4px; font-size: 16px; line-height: 1; }
+
+  /* Log list */
+  .log-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-bottom: 0.5px solid var(--border); }
+  .log-item:last-child { border-bottom: none; }
+  .log-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .log-dot.in { background: var(--green); }
+  .log-dot.out { background: var(--red); }
+  .log-dot.added { background: #378ADD; }
+  .log-text { flex: 1; font-size: 13px; }
+  .log-name { font-weight: 500; }
+  .log-action { color: var(--text2); }
+  .log-time { font-size: 11px; color: var(--text3); white-space: nowrap; margin-top: 2px; }
+
+  /* Alert banner */
+  .alert { background: var(--amber-light); color: var(--amber-dark); border: 0.5px solid var(--amber-border); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; display: flex; align-items: flex-start; gap: 8px; }
+
+  /* Threshold row */
+  .thresh-row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; font-size: 14px; border-bottom: 0.5px solid var(--border); }
+  .thresh-row label { flex: 1; color: var(--text2); }
+  .thresh-row input { width: 60px; padding: 6px 8px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); font-size: 14px; background: var(--bg2); color: var(--text); text-align: center; outline: none; -webkit-appearance: none; }
+
+  /* Filter tabs */
+  .filter-tabs { display: flex; gap: 6px; padding: 10px 14px 0; flex-wrap: wrap; }
+  .filter-tab { border: 0.5px solid var(--border2); background: transparent; border-radius: 20px; padding: 4px 12px; font-size: 12px; cursor: pointer; color: var(--text2); }
+  .filter-tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  .empty { text-align: center; padding: 32px 16px; color: var(--text3); font-size: 14px; }
+  .section-gap { height: 1px; }
+  .cam-status { font-size: 12px; color: var(--text3); text-align: center; padding: 6px 14px; }
+  .manual-row { display: flex; gap: 8px; padding: 0 14px 12px; }
+  .manual-row input { flex: 1; padding: 10px 12px; border: 0.5px solid var(--border2); border-radius: var(--radius-sm); font-size: 14px; background: var(--bg2); color: var(--text); outline: none; }
+  .manual-row button { padding: 10px 16px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; cursor: pointer; border: 0.5px solid var(--border2); background: var(--bg2); color: var(--text); white-space: nowrap; }
+  .divider { height: 0.5px; background: var(--border); margin: 4px 0 10px; }
+  .offline-badge { font-size: 11px; background: var(--blue-light); color: var(--blue-dark); border: 0.5px solid var(--blue-border); border-radius: 20px; padding: 2px 8px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="live-dot" id="live-dot"></div>
+  <h1>Inventory</h1>
+  <span class="offline-badge" id="offline-badge">offline</span>
+  <button class="topbar-btn" onclick="exportCSV()">CSV</button>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="lbl">Items</div><div class="val" id="s-total">0</div></div>
+  <div class="stat"><div class="lbl">Checked in</div><div class="val green" id="s-in">0</div></div>
+  <div class="stat"><div class="lbl">Checked out</div><div class="val red" id="s-out">0</div></div>
+  <div class="stat"><div class="lbl">Scans</div><div class="val" id="s-tx">0</div></div>
+</div>
+
+<div class="nav">
+  <button class="active" id="nav-scan" onclick="showTab('scan')">
+    <span class="ico">⬛</span>Scan
+  </button>
+  <button id="nav-add" onclick="showTab('add')">
+    <span class="ico">＋</span>Add item
+  </button>
+  <button id="nav-inv" onclick="showTab('inv')">
+    <span class="ico">📦</span>Inventory
+  </button>
+  <button id="nav-log" onclick="showTab('log')">
+    <span class="ico">📋</span>Log
+  </button>
+  <button id="nav-settings" onclick="showTab('settings')">
+    <span class="ico">⚙</span>Settings
+  </button>
+</div>
+
+<div class="content" id="content">
+  <!-- injected by JS -->
+</div>
+
+<script>
+// Load jsQR: tries local file first (works offline after first visit), falls back to CDN
+(function() {
+  function loadScript(src, cb) {
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = cb;
+    s.onerror = cb; // cb handles both success and failure
+    document.head.appendChild(s);
+  }
+  window._jsqrReady = false;
+  loadScript('./jsqr.min.js', function() {
+    if (typeof jsQR !== 'undefined') { window._jsqrReady = true; return; }
+    // Local file missing — load from CDN (requires internet, SW will cache it)
+    loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js', function() {
+      if (typeof jsQR !== 'undefined') window._jsqrReady = true;
+    });
+  });
+})();
+</script>
+<script>
+const STORE = 'inv_pwa_v1';
+let inventory = {};
+let log = [];
+let mode = 'in';
+let logFilter = 'all';
+let lowThresh = 2;
+let stream = null;
+let rafId = null;
+let lastCode = null;
+let lastCodeTime = 0;
+const DEBOUNCE = 2500;
+let currentTab = 'scan';
+let lastFeedback = null;
+
+// --- Storage ---
+function loadData() {
+  try {
+    const d = JSON.parse(localStorage.getItem(STORE) || '{}');
+    inventory = d.inventory || {};
+    log = (d.log || []).map(l => ({ ...l, time: new Date(l.time) }));
+    lowThresh = d.lowThresh !== undefined ? d.lowThresh : 2;
+  } catch(e) {}
+}
+function saveData() {
+  try { localStorage.setItem(STORE, JSON.stringify({ inventory, log, lowThresh })); } catch(e) {}
+}
+
+// --- Offline indicator ---
+function updateOnline() {
+  const b = document.getElementById('offline-badge');
+  if (navigator.onLine) { b.style.display = 'none'; }
+  else { b.style.display = ''; }
+}
+window.addEventListener('online', updateOnline);
+window.addEventListener('offline', updateOnline);
+updateOnline();
+
+// --- Camera ---
+let video, canvas, ctx;
+function initCamera() {
+  video = document.getElementById('cam-video');
+  canvas = document.getElementById('qr-canvas');
+  if (!canvas) return;
+  ctx = canvas.getContext('2d', { willReadFrequently: true });
+}
+
+async function startCam() {
+  initCamera();
+  if (!video) return;
+  try {
+    document.getElementById('cam-status') && (document.getElementById('cam-status').textContent = 'Requesting camera…');
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    video.srcObject = stream;
+    video.onloadedmetadata = () => {
+      const ph = document.getElementById('cam-placeholder');
+      const sf = document.getElementById('scan-frame');
+      if (ph) ph.style.display = 'none';
+      if (sf) sf.style.display = 'flex';
+      document.getElementById('btn-start') && (document.getElementById('btn-start').style.display = 'none');
+      document.getElementById('btn-stop') && (document.getElementById('btn-stop').style.display = '');
+      document.getElementById('live-dot').classList.add('active');
+      document.getElementById('cam-status') && (document.getElementById('cam-status').textContent = 'Point camera at a QR code');
+      scanLoop();
+    };
+  } catch(e) {
+    const s = document.getElementById('cam-status');
+    if (s) s.textContent = 'Camera denied. Use manual entry below.';
+  }
+}
+
+function stopCam() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (video) video.srcObject = null;
+  document.getElementById('live-dot').classList.remove('active');
+  const ph = document.getElementById('cam-placeholder');
+  const sf = document.getElementById('scan-frame');
+  if (ph) ph.style.display = 'flex';
+  if (sf) sf.style.display = 'none';
+  document.getElementById('btn-start') && (document.getElementById('btn-start').style.display = '');
+  document.getElementById('btn-stop') && (document.getElementById('btn-stop').style.display = 'none');
+  document.getElementById('cam-status') && (document.getElementById('cam-status').textContent = 'Camera stopped.');
+}
+
+function scanLoop() {
+  if (!stream) return;
+  if (video && video.readyState === video.HAVE_ENOUGH_DATA && canvas) {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (typeof jsQR !== 'undefined') {
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const result = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+      if (result) {
+        const code = result.data.trim();
+        const now = Date.now();
+        if (code !== lastCode || now - lastCodeTime > DEBOUNCE) {
+          lastCode = code; lastCodeTime = now;
+          processCode(code);
+        }
+      }
+    }
+  }
+  rafId = requestAnimationFrame(scanLoop);
+}
+
+// --- Parse pipe-delimited QR: "Item Name | CODE | Notes"
+function parseQR(raw) {
+  const parts = raw.split('|').map(s => s.trim());
+  const name  = parts[0] || raw.trim();
+  const code  = (parts[1] || name).toUpperCase().replace(/\s+/g, '-');
+  const notes = parts[2] || '';
+  return { name, code, notes };
+}
+
+// --- Logic ---
+function processCode(raw) {
+  const { name, code, notes } = parseQR(raw);
+
+  const isNew = !inventory[code];
+  if (isNew) {
+    inventory[code] = { name, notes, status: 'in', total: 0 };
+  }
+  const item = inventory[code];
+
+  // Update name/notes if QR carries richer data than stored
+  if (!isNew && name !== code) item.name = name;
+  if (!isNew && notes) item.notes = notes;
+
+  if (mode === 'in') {
+    if (item.status === 'in') { showFeedback('err', `Already checked in: ${item.name}`); return; }
+    item.status = 'in'; item.total++;
+    showFeedback('in', `${isNew ? 'Added & checked in' : 'Checked in'}: ${item.name}`);
+    log.unshift({ code, name: item.name, action: 'in', time: new Date() });
+  } else {
+    if (item.status === 'out') { showFeedback('err', `Already checked out: ${item.name}`); return; }
+    item.status = 'out';
+    showFeedback('out', `Checked out: ${item.name}`);
+    log.unshift({ code, name: item.name, action: 'out', time: new Date() });
+  }
+  saveData(); renderStats();
+  if (currentTab === 'inv') renderTab('inv');
+  if (currentTab === 'log') renderTab('log');
+}
+
+
+function addItem() {
+  const name = document.getElementById('add-name').value.trim();
+  if (!name) { showFeedback('err', 'Item name is required.'); return; }
+  let code = (document.getElementById('add-code').value.trim() || '').toUpperCase().replace(/\s+/g, '-');
+  if (!code) code = 'ITEM-' + Date.now().toString(36).toUpperCase();
+  if (inventory[code]) { showFeedback('err', `Code "${code}" already exists.`); return; }
+  const notes = document.getElementById('add-notes').value.trim();
+  inventory[code] = { name, notes, status: 'in', total: 0 };
+  log.unshift({ code, name, action: 'added', time: new Date() });
+  showFeedback('added', `Added: ${name} (${code})`);
+  ['add-name', 'add-code', 'add-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('add-name').focus();
+  saveData(); renderStats();
+}
+
+function showFeedback(type, msg) {
+  lastFeedback = { type, msg };
+  const el = document.getElementById('feedback-strip');
+  if (!el) return;
+  el.className = 'feedback ' + type;
+  el.textContent = msg;
+  el.style.display = 'flex';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.display = 'none'; lastFeedback = null; }, 3000);
+}
+
+function startRename(code) {
+  const el = document.getElementById('inv-name-' + code);
+  if (!el) return;
+  const cur = inventory[code].name;
+  el.innerHTML = `<input class="inv-name-input" id="edit-${code}" value="${esc(cur)}" />`;
+  const inp = document.getElementById('edit-' + code);
+  inp.focus(); inp.select();
+  const commit = () => {
+    const v = inp.value.trim();
+    if (v) inventory[code].name = v;
+    saveData(); renderTab('inv');
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => { if (e.key==='Enter') inp.blur(); if (e.key==='Escape'){inp.value=cur;inp.blur();} });
+}
+
+// --- Tabs ---
+function showTab(tab) {
+  if (currentTab === 'scan' && tab !== 'scan') stopCam();
+  currentTab = tab;
+  ['scan','add','inv','log','settings'].forEach(t => {
+    document.getElementById('nav-' + t).className = t === tab ? 'active' : '';
+  });
+  renderTab(tab);
+  if (tab === 'scan') setTimeout(initCamera, 50);
+}
+
+function renderTab(tab) {
+  const c = document.getElementById('content');
+  if (tab === 'scan') c.innerHTML = scanHTML();
+  else if (tab === 'add') c.innerHTML = addHTML();
+  else if (tab === 'inv') c.innerHTML = invHTML();
+  else if (tab === 'log') c.innerHTML = logHTML();
+  else if (tab === 'settings') c.innerHTML = settingsHTML();
+
+  if (tab === 'scan') {
+    initCamera();
+    document.getElementById('manual-input').addEventListener('keydown', e => { if (e.key==='Enter') manualGo(); });
+    if (lastFeedback) showFeedback(lastFeedback.type, lastFeedback.msg);
+  }
+  if (tab === 'add') {
+    document.getElementById('add-notes').addEventListener('keydown', e => { if (e.key==='Enter') addItem(); });
+    if (lastFeedback) showFeedback(lastFeedback.type, lastFeedback.msg);
+  }
+  renderStats();
+}
+
+function scanHTML() {
+  return `
+    <div class="card">
+      <div class="mode-toggle">
+        <button class="${mode==='in'?'active':''}" onclick="setMode('in')">⬇ Check in</button>
+        <button class="${mode==='out'?'active':''}" onclick="setMode('out')">⬆ Check out</button>
+      </div>
+      <div class="cam-wrap">
+        <video id="cam-video" autoplay playsinline muted></video>
+        <div class="scan-frame" id="scan-frame" style="display:none">
+          <div class="scan-box"><div class="scan-line"></div></div>
+        </div>
+        <div class="cam-placeholder" id="cam-placeholder">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="2" width="8" height="8" rx="1"/><rect x="2" y="14" width="8" height="8" rx="1"/><rect x="14" y="14" width="4" height="4" rx=".5"/><rect x="20" y="14" width="2" height="2"/><rect x="14" y="20" width="2" height="2"/><rect x="18" y="18" width="4" height="4" rx=".5"/></svg>
+          <span>Tap to start camera</span>
+        </div>
+        <canvas id="qr-canvas"></canvas>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-start" onclick="startCam()">▶ Start camera</button>
+        <button class="btn btn-danger" id="btn-stop" onclick="stopCam()" style="display:none">■ Stop</button>
+      </div>
+      <div class="cam-status" id="cam-status">Tap "Start camera" and allow access</div>
+      <div class="divider"></div>
+      <div style="padding: 0 14px 4px; font-size: 12px; color: var(--text3);">Manual entry:</div>
+      <div class="manual-row">
+        <input type="text" id="manual-input" placeholder="Type or paste code…" />
+        <button onclick="manualGo()">Log</button>
+      </div>
+      <div class="feedback" id="feedback-strip" style="display:none"></div>
+    </div>
+    ${alertHTML()}
+  `;
+}
+
+function addHTML() {
+  return `
+    <div class="card">
+      <div class="card-title" style="padding-bottom:10px">New item</div>
+      <div style="padding: 0 14px 12px; font-size: 12px; color: var(--text3); line-height: 1.6;">
+        Or encode a QR with:<br>
+        <code style="font-size:12px; background:var(--bg2); padding:2px 6px; border-radius:4px;">Item Name | CODE | Notes</code>
+        and scanning will auto-add it.
+      </div>
+      <div class="field"><label>Item name *</label><input type="text" id="add-name" placeholder='e.g. Dell Laptop 15"' /></div>
+      <div class="field"><label>Code / SKU (auto if blank)</label><input type="text" id="add-code" placeholder="e.g. LAPTOP-001" /></div>
+      <div class="field"><label>Notes (optional)</label><input type="text" id="add-notes" placeholder="Serial #, location…" /></div>
+      <div class="btn-row"><button class="btn btn-primary" onclick="addItem()">＋ Add to inventory</button></div>
+      <div class="feedback" id="feedback-strip" style="display:none"></div>
+    </div>
+  `;
+}
+
+function invHTML() {
+  const entries = Object.entries(inventory);
+  if (!entries.length) return `<div class="card"><div class="empty">No items yet.<br>Add one or scan a QR code.</div></div>`;
+  return `<div class="card">` + entries.map(([code, item]) => {
+    const isOut = item.status === 'out';
+    const statusPill = `<span class="pill ${isOut ? 'pill-out' : 'pill-in'}">${isOut ? 'out' : 'in'}</span>`;
+    const sub = [item.notes, item.name !== code ? code : ''].filter(Boolean).join(' · ');
+    return `<div class="inv-item">
+      <div class="inv-info">
+        <div class="inv-name" id="inv-name-${code}">${esc(item.name)}</div>
+        ${sub ? `<div class="inv-sub">${esc(sub)}</div>` : ''}
+      </div>
+      <div class="inv-right">
+        ${statusPill}
+        <button class="edit-btn" onclick="startRename('${code}')">✎</button>
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function logHTML() {
+  const filtered = logFilter === 'all' ? log : log.filter(l => l.action === logFilter);
+  return `
+    <div class="card">
+      <div class="filter-tabs">
+        ${['all','in','out','added'].map(f =>
+          `<button class="filter-tab ${logFilter===f?'active':''}" onclick="setLogFilter('${f}')">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`
+        ).join('')}
+      </div>
+      ${filtered.length ? filtered.slice(0,100).map(l => {
+        const ts = l.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        const date = l.time.toLocaleDateString([],{month:'short',day:'numeric'});
+        const action = l.action==='in'?'checked in':l.action==='out'?'checked out':'added';
+        return `<div class="log-item">
+          <div class="log-dot ${l.action}"></div>
+          <div class="log-text"><span class="log-name">${esc(l.name)}</span> <span class="log-action">${action}</span>
+          <div class="log-time">${date} ${ts}</div></div>
+        </div>`;
+      }).join('') : `<div class="empty">No activity yet.</div>`}
+    </div>
+  `;
+}
+
+function settingsHTML() {
+  return `
+    <div class="card">
+      <div class="card-title" style="padding-bottom:10px">Data</div>
+      <div class="btn-row"><button class="btn btn-neutral" onclick="exportCSV()">⬇ Export CSV</button></div>
+      <div class="btn-row"><button class="btn" style="background:var(--err-light);color:var(--err-dark);border:0.5px solid var(--err-border)" onclick="clearAll()">🗑 Clear all data</button></div>
+    </div>
+    <div class="card" style="margin-top:0">
+      <div class="card-title" style="padding-bottom:10px">Install as app</div>
+      <div style="padding: 0 14px 14px; font-size: 13px; color: var(--text2); line-height: 1.6;">
+        <strong>iOS Safari:</strong> tap the Share button → "Add to Home Screen"<br><br>
+        <strong>Android Chrome:</strong> tap the ⋮ menu → "Add to Home Screen" or "Install app"<br><br>
+        Once installed, the app works fully offline.
+      </div>
+    </div>
+  `;
+}
+
+function alertHTML() {
+  // No qty-based alerts in single-piece mode; kept for future use
+  return '';
+}
+
+function renderStats() {
+  const items = Object.values(inventory);
+  document.getElementById('s-total').textContent = items.length;
+  document.getElementById('s-in').textContent = items.filter(i => i.status === 'in').length;
+  document.getElementById('s-out').textContent = items.filter(i => i.status === 'out').length;
+  document.getElementById('s-tx').textContent = log.length;
+}
+
+function setMode(m) {
+  mode = m;
+  renderTab('scan');
+  setTimeout(() => { if (stream) { initCamera(); } }, 50);
+}
+
+function setLogFilter(f) { logFilter = f; renderTab('log'); }
+function setThresh(v) { lowThresh = Math.max(0, parseInt(v)||0); saveData(); }
+
+function manualGo() {
+  const inp = document.getElementById('manual-input');
+  const v = inp ? inp.value.trim() : '';
+  if (!v) return;
+  processCode(v);
+  if (inp) inp.value = '';
+}
+
+function exportCSV() {
+  const rows = [['Code','Name','Notes','Status','Total Check-ins']];
+  Object.entries(inventory).forEach(([code,item]) => {
+    rows.push([code, item.name, item.notes||'', item.status, item.total]);
+  });
+  rows.push([]); rows.push(['--- Activity Log ---']); rows.push(['Code','Name','Action','Date','Time']);
+  log.forEach(l=>rows.push([l.code,l.name,l.action,l.time.toLocaleDateString(),l.time.toLocaleTimeString()]));
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=`inventory_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
+}
+
+function clearAll() {
+  if (!confirm('Clear all data? This cannot be undone.')) return;
+  inventory={}; log=[];
+  localStorage.removeItem(STORE);
+  renderTab(currentTab); renderStats();
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// --- Service Worker ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(()=>{});
+}
+
+// --- Init ---
+loadData();
+renderTab('scan');
+</script>
+</body>
+</html>

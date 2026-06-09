@@ -1,0 +1,13 @@
+{
+  "name": "Inventory Control",
+  "short_name": "Inventory",
+  "description": "QR code inventory control — works offline",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1D9E75",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
