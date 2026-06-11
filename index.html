@@ -99,6 +99,26 @@
   .pill-in{background:var(--green-light);color:var(--green-dark)}
   .pill-out{background:var(--red-light);color:var(--red-dark)}
   .edit-btn{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;font-size:16px;line-height:1}
+  .inv-item{cursor:pointer}
+  .inv-item:active{background:var(--bg2)}
+  /* Edit modal */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:flex;align-items:flex-end;justify-content:center}
+  .modal{background:var(--bg);border-radius:var(--radius) var(--radius) 0 0;width:100%;max-width:480px;padding-bottom:var(--safe-bottom);animation:slideup .22s ease}
+  @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .modal-header{display:flex;align-items:center;padding:14px 16px 10px;border-bottom:.5px solid var(--border)}
+  .modal-title{font-size:16px;font-weight:600;flex:1}
+  .modal-close{background:none;border:none;font-size:22px;color:var(--text3);cursor:pointer;padding:0 4px;line-height:1}
+  .modal-body{padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+  .modal-field{display:flex;flex-direction:column;gap:4px}
+  .modal-field label{font-size:12px;font-weight:500;color:var(--text2)}
+  .modal-field input{padding:10px 12px;border:.5px solid var(--border2);border-radius:var(--radius-sm);font-size:15px;background:var(--bg2);color:var(--text);outline:none;-webkit-appearance:none}
+  .modal-field input:focus{border-color:var(--green)}
+  .modal-status-row{display:flex;gap:8px}
+  .modal-status-row button{flex:1;padding:10px;border-radius:var(--radius-sm);font-size:14px;font-weight:500;cursor:pointer;border:.5px solid var(--border2);background:var(--bg2);color:var(--text2)}
+  .modal-status-row button.active-in{background:var(--green-light);color:var(--green-dark);border-color:var(--green-border)}
+  .modal-status-row button.active-out{background:var(--red-light);color:var(--red-dark);border-color:var(--red-border)}
+  .modal-footer{display:flex;gap:8px;padding:4px 16px 14px}
+  .modal-footer .btn{flex:1}
   /* Per-item log */
   .item-log{background:var(--bg2);border-top:.5px solid var(--border);padding:8px 14px;display:none}
   .item-log.open{display:block}
@@ -378,24 +398,118 @@ function showFeedback(type,msg){
 }
 
 // ── Rename ──
-function startRename(code){
-  const el=document.getElementById('inv-name-'+code);
-  if(!el) return;
-  const cur=inventory[code].name;
-  el.innerHTML=`<input class="inv-name-input" id="edit-${code}" value="${esc(cur)}" />`;
-  const inp=document.getElementById('edit-'+code);
-  inp.focus(); inp.select();
-  const commit=()=>{const v=inp.value.trim();if(v)inventory[code].name=v;saveData();renderTab('inv');};
-  inp.addEventListener('blur',commit);
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=cur;inp.blur();}});
+// ── Edit modal ──
+function openEditModal(code){
+  const item=inventory[code];
+  if(!item) return;
+  const backdrop=document.createElement('div');
+  backdrop.className='modal-backdrop';
+  backdrop.id='edit-modal';
+  let editStatus=item.status;
+  const render=()=>{
+    backdrop.innerHTML=`
+      <div class="modal">
+        <div class="modal-header">
+          <span class="modal-title">Edit item</span>
+          <button class="modal-close" onclick="closeEditModal()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-field">
+            <label>Item name</label>
+            <input id="modal-name" type="text" value="${esc(item.name)}" />
+          </div>
+          <div class="modal-field">
+            <label>Code / SKU</label>
+            <input id="modal-code-disp" type="text" value="${esc(code)}" disabled style="opacity:.5;cursor:not-allowed" />
+          </div>
+          <div class="modal-field">
+            <label>Notes</label>
+            <input id="modal-notes" type="text" value="${esc(item.notes||'')}" placeholder="Serial #, location…" />
+          </div>
+          <div class="modal-field">
+            <label>Status</label>
+            <div class="modal-status-row">
+              <button onclick="setModalStatus('in')" class="${editStatus==='in'?'active-in':''}">⬇ Checked in</button>
+              <button onclick="setModalStatus('out')" class="${editStatus==='out'?'active-out':''}">⬆ Checked out</button>
+            </div>
+          </div>
+          <details style="font-size:12px;color:var(--text3)">
+            <summary style="cursor:pointer;padding:4px 0">History (${(item.history||[]).length} events)</summary>
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:2px">
+              ${(item.history||[]).length?(item.history||[]).slice().reverse().map(h=>{
+                const t=new Date(h.time);
+                const ts=t.toLocaleDateString([],{month:'short',day:'numeric'})+' '+t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+                const label=h.action==='in'?'checked in':h.action==='out'?'checked out':'added';
+                return `<div class="item-log-entry"><div class="item-log-dot ${h.action}"></div><span>${label} — ${ts}</span></div>`;
+              }).join(''):'<div style="padding:4px 0">No history yet.</div>'}
+            </div>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" onclick="saveEditModal('${code}')">Save</button>
+          <button class="btn" style="background:var(--err-light);color:var(--err-dark);border:.5px solid var(--err-border)" onclick="deleteItem('${code}')">Delete</button>
+        </div>
+      </div>`;
+    // Re-bind status buttons after re-render
+    backdrop.querySelectorAll('.modal-status-row button')[0].onclick=()=>{editStatus='in';render();};
+    backdrop.querySelectorAll('.modal-status-row button')[1].onclick=()=>{editStatus='out';render();};
+    backdrop.querySelector('.modal-footer .btn-primary').onclick=()=>saveEditModal(code,editStatus);
+  };
+  window._modalEditStatus=editStatus;
+  // Store status ref so save can read current value
+  backdrop._getStatus=()=>editStatus;
+  render();
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click',e=>{if(e.target===backdrop) closeEditModal();});
+  setTimeout(()=>{ const n=document.getElementById('modal-name'); if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}},100);
 }
 
-// ── Toggle per-item history ──
+function setModalStatus(s){ /* handled inline */ }
+
+function saveEditModal(code, statusOverride){
+  const item=inventory[code];
+  if(!item) return;
+  const nameEl=document.getElementById('modal-name');
+  const notesEl=document.getElementById('modal-notes');
+  const modal=document.getElementById('edit-modal');
+  const newName=(nameEl&&nameEl.value.trim())||item.name;
+  const newNotes=notesEl?notesEl.value.trim():'';
+  const newStatus=statusOverride||(modal&&modal._getStatus?modal._getStatus():item.status);
+  // Log a status change if it changed
+  if(newStatus!==item.status){
+    const now=new Date();
+    item.history=item.history||[];
+    item.history.push({action:newStatus,time:now.toISOString()});
+    log.unshift({code,name:newName,action:newStatus,time:now});
+    if(newStatus==='in') item.total++;
+  }
+  item.name=newName;
+  item.notes=newNotes;
+  item.status=newStatus;
+  saveData(); renderStats();
+  closeEditModal();
+  renderTab('inv');
+}
+
+function closeEditModal(){
+  const m=document.getElementById('edit-modal');
+  if(m) m.remove();
+}
+
+function deleteItem(code){
+  if(!confirm(`Delete "${inventory[code]&&inventory[code].name||code}"? This cannot be undone.`)) return;
+  delete inventory[code];
+  saveData(); renderStats();
+  closeEditModal();
+  renderTab('inv');
+}
+
+// ── Toggle per-item history (kept for compatibility) ──
 function toggleHistory(code){
   const el=document.getElementById('hist-'+code);
-  if(!el) return;
-  el.classList.toggle('open');
+  if(el) el.classList.toggle('open');
 }
+function startRename(code){ openEditModal(code); }
 
 // ── Tabs ──
 function showTab(tab){
@@ -513,15 +627,14 @@ function invHTML(){
       return `<div class="item-log-entry"><div class="item-log-dot ${h.action}"></div><span>${label} — ${ts}</span></div>`;
     }).join(''):'<div style="font-size:11px;color:var(--text3);padding:4px 0">No history yet.</div>';
     return `
-      <div class="inv-item">
+      <div class="inv-item" onclick="openEditModal('${code}')">
         <div class="inv-info">
-          <div class="inv-name" id="inv-name-${code}">${esc(item.name)}</div>
+          <div class="inv-name">${esc(item.name)}</div>
           ${sub?`<div class="inv-sub">${esc(sub)}</div>`:''}
         </div>
         <div class="inv-right">
           ${statusPill}
-          <button class="edit-btn" onclick="toggleHistory('${code}')" title="Show history">⏱</button>
-          <button class="edit-btn" onclick="startRename('${code}')">✎</button>
+          <span style="color:var(--text3);font-size:18px;padding-left:4px">›</span>
         </div>
       </div>
       <div class="item-log" id="hist-${code}">${histHTML}</div>`;
